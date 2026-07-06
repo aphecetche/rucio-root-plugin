@@ -1,0 +1,12 @@
+build/
+cmake-build-*/
+*.dylib
+*.so
+*.dll
+*.pcm
+*.rootmap
+*.o
+*.a
+.DS_Store
+install*
+build*

@@ -1,0 +1,61 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 0,
+    "minor": 22,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "configure",
+      "hidden": true,
+      "cacheVariables": {
+        "BUILD_SHARED_LIBS": {
+          "type": "BOOL",
+          "value": "ON"
+        },
+        "CMAKE_EXPORT_COMPILE_COMMANDS": {
+          "type": "BOOL",
+          "value": "ON"
+        }
+      }
+    },
+    {
+      "name": "dev",
+      "inherits": "configure",
+      "displayName": "Development Config",
+      "description": "Development build",
+      "binaryDir": "build-dev",
+      "installDir": "install-dev",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": {
+          "type": "string",
+          "value": "RelWithDebInfo"
+        }
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "dev",
+      "configurePreset": "dev",
+      "jobs": 4,
+      "targets": ["install"]
+    }
+  ],
+  "workflowPresets": [
+    {
+      "name": "dev",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "dev"
+        },
+        {
+          "type": "build",
+          "name": "dev"
+        }
+      ]
+    }
+  ]
+}
