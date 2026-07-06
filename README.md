@@ -13,7 +13,7 @@ plugin sees it.
 
 The plugin resolves the DID through the Rucio REST API, receives PFNs, and delegates the actual I/O to ROOT's existing transports, typically XRootD through `root://...`.
 
-This MVP is read-only. `CREATE`, `RECREATE`, `NEW`, and `UPDATE` intentionally fail until upload and DID registration semantics are designed.
+This MVP is read-only. `CREATE`, `RECREATE`, `NEW`, and `UPDATE` intentionally fail.
 
 ## Configuration
 
@@ -60,16 +60,9 @@ Install the library and plugin macro somewhere visible to ROOT. The installed pl
 cmake --install build --prefix /path/to/prefix
 ```
 
-Then make sure ROOT can find the library and plugin macro. For example, add a ROOT plugin path entry in `.rootrc`:
+Then make sure ROOT can find the library and plugin macro. For example, add the relevant paths entry in `.rootrc`:
 
-```sh
-printf 'Unix.*.Root.PluginPath: /path/to/prefix/etc/plugins:%s/plugins\n' "$(/opt/homebrew/bin/root-config --etcdir)" >> ~/.rootrc
+```shell
+Unix.*.Root.PluginPath: /path/to/rucio-root-plugin/install-dev/etc/plugins:$(ROOTSYS)/etc/root/plugins
+Unix.*.Root.DynamicPath: /path/to/rucio-root-plugin/install-dev/lib:$(ROOTSYS)/lib/root
 ```
-
-and make the library visible to the dynamic loader:
-
-```sh
-export DYLD_LIBRARY_PATH=/path/to/prefix/lib:$DYLD_LIBRARY_PATH
-```
-
-After that, no explicit `gPluginMgr->AddHandler(...)` call is needed.
