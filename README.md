@@ -1,43 +1,54 @@
 # Rucio ROOT Plugin
 
-Minimal ROOT `TFile` plugin for opening Rucio DIDs transparently:
+ROOT `TFile` plugin for opening Rucio DIDs directly:
 
 ```cpp
 auto f = TFile::Open("rucio:///scope:name");
 ```
 
-ROOT-safe DID URL forms are `rucio:///scope:name` and `rucio://scope/name`.
-The visually natural `rucio://scope:name` form is accepted by the standalone
-parser, but ROOT's `TUrl` treats `scope:name` as URL authority syntax before the
-plugin sees it.
+Use the native Rucio DID form `scope:name`, with three slashes after `rucio:`:
 
-The plugin resolves the DID through the Rucio REST API, receives PFNs, and delegates the actual I/O to ROOT's existing transports, typically XRootD through `root://...`.
+```text
+rucio:///scope:name
+```
 
-This MVP is read-only. `CREATE`, `RECREATE`, `NEW`, and `UPDATE` intentionally fail.
+The third slash is required.[^slashes]
+
+The plugin resolves the DID through the Rucio REST API, receives PFNs, and then
+opens the selected PFN through ROOT's existing transports, typically XRootD via
+`root://...`.
+
+The plugin is read-only. `CREATE`, `RECREATE`, `NEW`, and `UPDATE` modes are
+not supported.
 
 ## Configuration
 
-The resolver reads the standard Rucio client configuration and X509 proxy setup.
-For normal KM3NeT use, `RUCIO_CONFIG` plus the usual X509 environment should be
-enough:
+The plugin reads the standard Rucio client configuration and X509 proxy setup. In
+a typical setup, `RUCIO_CONFIG` is the only Rucio-specific variable you need to
+set, as long as its `[client]` section contains `rucio_host` and `account`.
 
-- `RUCIO_CONFIG`: Rucio client config. The plugin reads `rucio_host` and `account` from its `[client]` section.
-- `RUCIO_HOST`: optional override for the Rucio REST base URL when no config value should be used.
-- `RUCIO_ACCOUNT`: optional override for the account used when obtaining an X509 auth token.
-- `X509_USER_PROXY`: optional proxy path. If unset, `/tmp/x509up_u<uid>` is used.
-- `X509_CERT_DIR`: optional CA certificate directory.
-- `RUCIO_CA_PATH`: optional CA bundle file or CA directory override.
+| Variable | Required | Description |
+| --- | --- | --- |
+| `RUCIO_CONFIG` | Usually | Path to the Rucio client config. The plugin reads `rucio_host` and `account` from its `[client]` section. |
+| `RUCIO_HOST` | Optional | Override for the Rucio REST base URL. Use this instead of, or in addition to, `RUCIO_CONFIG`. |
+| `RUCIO_ACCOUNT` | Optional | Override for the account used when obtaining an X509 auth token. Use this instead of, or in addition to, `RUCIO_CONFIG`. |
+| `X509_USER_PROXY` | Optional | Proxy path. If unset, `/tmp/x509up_u<uid>` is used. |
+| `X509_CERT_DIR` | Optional | CA certificate directory. |
+| `RUCIO_CA_PATH` | Optional | CA bundle file or CA directory override. |
 
 With X509 authentication, the plugin obtains the REST token internally via
-`/auth/x509`; users do not need to export `RUCIO_AUTH_TOKEN`.
+`/auth/x509`. You need a valid X509 proxy, but you do not need to export
+`RUCIO_AUTH_TOKEN`.
 
-URL query options can refine replica selection:
+## URL Options
+
+URL query options refine replica selection:
 
 ```text
 rucio:///scope:name?scheme=root&scheme=davs&rse=MY_RSE_EXPRESSION&domain=wan&sort=random&limit=3
 ```
 
-Supported MVP query keys:
+Supported query keys:
 
 - `scheme` or `schemes`: comma-separated or repeated list of schemes.
 - `rse` or `rse_expression`: RSE expression.
@@ -49,20 +60,31 @@ Supported MVP query keys:
 ## Build
 
 ```sh
-cmake -S . -B build
-cmake --build build
-ctest --test-dir build
+cmake --workflow --preset release
 ```
 
-Install the library and plugin macro somewhere visible to ROOT. The installed plugin macro registers `rucio://` URLs as a `TFile` protocol handled by `libRucioROOT`.
+The release preset builds the plugin and installs it under `install-release`.
+To choose another installation prefix, configure the release preset with an
+explicit install prefix and then build it:
 
 ```sh
-cmake --install build --prefix /path/to/prefix
+cmake --preset release -DCMAKE_INSTALL_PREFIX=/path/to/prefix
+cmake --build --preset release
 ```
 
-Then make sure ROOT can find the library and plugin macro. For example, add the relevant paths entry in `.rootrc`:
+Then make sure ROOT can find both the plugin macro and the library. For example,
+add these entries to `.rootrc`:
 
 ```shell
-Unix.*.Root.PluginPath: /path/to/rucio-root-plugin/install-dev/etc/plugins:$(ROOTSYS)/etc/root/plugins
-Unix.*.Root.DynamicPath: /path/to/rucio-root-plugin/install-dev/lib:$(ROOTSYS)/lib/root
+Unix.*.Root.PluginPath: /path/to/prefix/etc/plugins:$(ROOTSYS)/etc/root/plugins
+Unix.*.Root.DynamicPath: /path/to/prefix/lib:$(ROOTSYS)/lib/root
 ```
+
+For development builds and tests, use the `dev` preset:
+
+```sh
+cmake --workflow --preset dev
+ctest --preset dev
+```
+
+[^slashes]: `rucio:///scope:name` makes `scope:name` a URL path. Avoid `rucio://scope:name`, where URL parsing can treat `scope:name` as authority syntax instead of a DID.
