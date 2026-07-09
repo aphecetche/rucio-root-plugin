@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <map>
+#include <memory>
 #include <nlohmann/json.hpp>
 #include <sstream>
 #include <stdexcept>
@@ -16,6 +17,34 @@
 using json = nlohmann::json;
 
 namespace {
+struct CurlEasyDeleter {
+  void operator()(CURL* curl) const { curl_easy_cleanup(curl); }
+};
+
+struct CurlSlistDeleter {
+  void operator()(curl_slist* headers) const { curl_slist_free_all(headers); }
+};
+
+using CurlEasyPtr = std::unique_ptr<CURL, CurlEasyDeleter>;
+using CurlSlistPtr = std::unique_ptr<curl_slist, CurlSlistDeleter>;
+
+CurlEasyPtr MakeCurlHandle() {
+  CURL* curl = curl_easy_init();
+  if (!curl) {
+    throw std::runtime_error("Could not initialize libcurl");
+  }
+  return CurlEasyPtr(curl);
+}
+
+void AppendHeader(CurlSlistPtr& headers, const std::string& header) {
+  curl_slist* appended = curl_slist_append(headers.get(), header.c_str());
+  if (!appended) {
+    throw std::runtime_error("Could not allocate libcurl header");
+  }
+  (void)headers.release();
+  headers.reset(appended);
+}
+
 std::string GetEnv(const char* name) {
   const char* value = std::getenv(name);
   return value ? std::string(value) : std::string();
@@ -160,10 +189,7 @@ std::vector<RucioReplica> TRucioResolver::Resolve(
         "RUCIO_CONFIG");
   }
 
-  CURL* curl = curl_easy_init();
-  if (!curl) {
-    throw std::runtime_error("Could not initialize libcurl");
-  }
+  auto curl = MakeCurlHandle();
 
   std::string responseBody;
   std::string requestBody = BuildListReplicasBody(scope, name);
@@ -173,31 +199,27 @@ std::vector<RucioReplica> TRucioResolver::Resolve(
   // /replicas/list expects the short-lived REST token. Do not send
   // X-Rucio-Account here; on the KM3NeT deployment the token already encodes
   // the account and an extra account header can make authentication fail.
-  struct curl_slist* headers = nullptr;
-  headers = curl_slist_append(headers, "Accept: application/x-json-stream");
-  headers = curl_slist_append(headers, "Content-Type: application/json");
-  headers =
-      curl_slist_append(headers, ("X-Rucio-Auth-Token: " + authToken).c_str());
+  CurlSlistPtr headers;
+  AppendHeader(headers, "Accept: application/x-json-stream");
+  AppendHeader(headers, "Content-Type: application/json");
+  AppendHeader(headers, "X-Rucio-Auth-Token: " + authToken);
 
-  curl_easy_setopt(curl, CURLOPT_URL, requestUrl.c_str());
-  curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
-  curl_easy_setopt(curl, CURLOPT_POST, 1L);
-  curl_easy_setopt(curl, CURLOPT_POSTFIELDS, requestBody.c_str());
-  curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE,
+  curl_easy_setopt(curl.get(), CURLOPT_URL, requestUrl.c_str());
+  curl_easy_setopt(curl.get(), CURLOPT_HTTPHEADER, headers.get());
+  curl_easy_setopt(curl.get(), CURLOPT_POST, 1L);
+  curl_easy_setopt(curl.get(), CURLOPT_POSTFIELDS, requestBody.c_str());
+  curl_easy_setopt(curl.get(), CURLOPT_POSTFIELDSIZE,
                    static_cast<long>(requestBody.size()));
-  curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
-  curl_easy_setopt(curl, CURLOPT_WRITEDATA, &responseBody);
-  curl_easy_setopt(curl, CURLOPT_USERAGENT, fOptions.userAgent.c_str());
-  curl_easy_setopt(curl, CURLOPT_TIMEOUT, fOptions.timeoutSeconds);
-  curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-  ApplyTlsOptions(curl, fOptions);
+  curl_easy_setopt(curl.get(), CURLOPT_WRITEFUNCTION, WriteCallback);
+  curl_easy_setopt(curl.get(), CURLOPT_WRITEDATA, &responseBody);
+  curl_easy_setopt(curl.get(), CURLOPT_USERAGENT, fOptions.userAgent.c_str());
+  curl_easy_setopt(curl.get(), CURLOPT_TIMEOUT, fOptions.timeoutSeconds);
+  curl_easy_setopt(curl.get(), CURLOPT_FOLLOWLOCATION, 1L);
+  ApplyTlsOptions(curl.get(), fOptions);
 
-  const CURLcode code = curl_easy_perform(curl);
+  const CURLcode code = curl_easy_perform(curl.get());
   long httpStatus = 0;
-  curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpStatus);
-
-  curl_slist_free_all(headers);
-  curl_easy_cleanup(curl);
+  curl_easy_getinfo(curl.get(), CURLINFO_RESPONSE_CODE, &httpStatus);
 
   if (code != CURLE_OK) {
     throw std::runtime_error(std::string("Rucio REST request failed: ") +
@@ -316,10 +338,7 @@ std::string TRucioResolver::GetAuthToken() const {
     throw std::runtime_error("X509_USER_PROXY is not set");
   }
 
-  CURL* curl = curl_easy_init();
-  if (!curl) {
-    throw std::runtime_error("Could not initialize libcurl");
-  }
+  auto curl = MakeCurlHandle();
 
   std::string responseBody;
   std::string token;
@@ -327,27 +346,23 @@ std::string TRucioResolver::GetAuthToken() const {
 
   // X509 authentication is the only place where the account header belongs.
   // The returned X-Rucio-Auth-Token is then used for catalogue requests.
-  struct curl_slist* headers = nullptr;
-  headers = curl_slist_append(headers,
-                              ("X-Rucio-Account: " + fOptions.account).c_str());
+  CurlSlistPtr headers;
+  AppendHeader(headers, "X-Rucio-Account: " + fOptions.account);
 
-  curl_easy_setopt(curl, CURLOPT_URL, authUrl.c_str());
-  curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
-  curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
-  curl_easy_setopt(curl, CURLOPT_WRITEDATA, &responseBody);
-  curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, HeaderCallback);
-  curl_easy_setopt(curl, CURLOPT_HEADERDATA, &token);
-  curl_easy_setopt(curl, CURLOPT_USERAGENT, fOptions.userAgent.c_str());
-  curl_easy_setopt(curl, CURLOPT_TIMEOUT, fOptions.timeoutSeconds);
-  curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-  ApplyTlsOptions(curl, fOptions);
+  curl_easy_setopt(curl.get(), CURLOPT_URL, authUrl.c_str());
+  curl_easy_setopt(curl.get(), CURLOPT_HTTPHEADER, headers.get());
+  curl_easy_setopt(curl.get(), CURLOPT_WRITEFUNCTION, WriteCallback);
+  curl_easy_setopt(curl.get(), CURLOPT_WRITEDATA, &responseBody);
+  curl_easy_setopt(curl.get(), CURLOPT_HEADERFUNCTION, HeaderCallback);
+  curl_easy_setopt(curl.get(), CURLOPT_HEADERDATA, &token);
+  curl_easy_setopt(curl.get(), CURLOPT_USERAGENT, fOptions.userAgent.c_str());
+  curl_easy_setopt(curl.get(), CURLOPT_TIMEOUT, fOptions.timeoutSeconds);
+  curl_easy_setopt(curl.get(), CURLOPT_FOLLOWLOCATION, 1L);
+  ApplyTlsOptions(curl.get(), fOptions);
 
-  const CURLcode code = curl_easy_perform(curl);
+  const CURLcode code = curl_easy_perform(curl.get());
   long httpStatus = 0;
-  curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpStatus);
-
-  curl_slist_free_all(headers);
-  curl_easy_cleanup(curl);
+  curl_easy_getinfo(curl.get(), CURLINFO_RESPONSE_CODE, &httpStatus);
 
   if (code != CURLE_OK) {
     throw std::runtime_error(std::string("Rucio X509 authentication failed: ") +
