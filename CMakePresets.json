@@ -1,8 +1,8 @@
 {
   "version": 6,
   "cmakeMinimumRequired": {
-    "major": 0,
-    "minor": 22,
+    "major": 3,
+    "minor": 25,
     "patch": 0
   },
   "configurePresets": [
@@ -33,9 +33,29 @@
           "value": "RelWithDebInfo"
         }
       }
+    },
+    {
+      "name": "release",
+      "inherits": "configure",
+      "displayName": "Release Config",
+      "description": "Release build for installation",
+      "binaryDir": "build-release",
+      "installDir": "install-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": {
+          "type": "string",
+          "value": "Release"
+        }
+      }
     }
   ],
   "buildPresets": [
+    {
+      "name": "release",
+      "configurePreset": "release",
+      "jobs": 4,
+      "targets": ["install"]
+    },
     {
       "name": "dev",
       "configurePreset": "dev",
@@ -43,7 +63,29 @@
       "targets": ["install"]
     }
   ],
+  "testPresets": [
+    {
+      "name": "dev",
+      "configurePreset": "dev",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ],
   "workflowPresets": [
+    {
+      "name": "release",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "release"
+        },
+        {
+          "type": "build",
+          "name": "release"
+        }
+      ]
+    },
     {
       "name": "dev",
       "steps": [
