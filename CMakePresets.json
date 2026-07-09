@@ -65,6 +65,13 @@
   ],
   "testPresets": [
     {
+      "name": "release",
+      "configurePreset": "release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
       "name": "dev",
       "configurePreset": "dev",
       "output": {

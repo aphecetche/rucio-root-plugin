@@ -7,6 +7,10 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        preset: [dev, release]
     defaults:
       run:
         shell: bash -el {0}
@@ -27,8 +31,8 @@ jobs:
             root
           cache-environment: true
 
-      - name: Build
-        run: cmake --workflow --preset dev
+      - name: Build ${{ matrix.preset }} preset
+        run: cmake --workflow --preset "${{ matrix.preset }}"
 
-      - name: Test
-        run: ctest --test-dir build-dev --output-on-failure
+      - name: Test ${{ matrix.preset }} preset
+        run: ctest --preset "${{ matrix.preset }}"
