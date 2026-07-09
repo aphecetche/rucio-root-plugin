@@ -1,12 +1,14 @@
 #include <cassert>
 #include <iostream>
+#include <stdexcept>
+#include <string>
 
 #include "TRucioUrl.h"
 
 int main() {
   {
     TRucioUrl url(
-        "rucio://scope:name?scheme=root,davs&rse=RSE_A&limit=2#inner.root");
+        "rucio:///scope:name?scheme=root,davs&rse=RSE_A&limit=2#inner.root");
     assert(url.Scope() == "scope");
     assert(url.Name() == "name");
     assert(url.Anchor() == "inner.root");
@@ -16,17 +18,25 @@ int main() {
   }
 
   {
-    TRucioUrl url("rucio:///scope:name?scheme=root");
-    assert(url.Scope() == "scope");
-    assert(url.Name() == "name");
-    assert(url.QueryValue("scheme") == "root");
+    bool rejected = false;
+    try {
+      TRucioUrl url("rucio://scope:name?scheme=root");
+    } catch (const std::invalid_argument& error) {
+      rejected = true;
+      assert(std::string(error.what()).find("third slash") !=
+             std::string::npos);
+    }
+    assert(rejected);
   }
 
   {
-    TRucioUrl url("rucio://scope/path/to/file.root?schemes=root&schemes=davs");
-    assert(url.Scope() == "scope");
-    assert(url.Name() == "path/to/file.root");
-    assert(url.QueryValues("schemes").size() == 2);
+    bool rejected = false;
+    try {
+      TRucioUrl url("rucio://scope/path/to/file.root");
+    } catch (const std::invalid_argument&) {
+      rejected = true;
+    }
+    assert(rejected);
   }
 
   std::cout << "TRucioUrl tests passed\n";

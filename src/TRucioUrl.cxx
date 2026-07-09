@@ -7,13 +7,6 @@
 #include <stdexcept>
 
 namespace {
-std::string TrimSlashes(std::string value) {
-  while (!value.empty() && value.front() == '/') {
-    value.erase(value.begin());
-  }
-  return value;
-}
-
 std::string ToLower(std::string value) {
   std::transform(
       value.begin(), value.end(), value.begin(),
@@ -43,28 +36,31 @@ TRucioUrl::TRucioUrl(std::string url) : fOriginal(std::move(url)) {
     rest = rest.substr(0, queryPos);
   }
 
-  rest = TrimSlashes(rest);
+  if (rest.empty() || rest.front() != '/') {
+    throw std::invalid_argument(
+        "Rucio URL is missing the third slash; use rucio:///scope:name");
+  }
+
+  rest.erase(rest.begin());
+  if (rest.empty() || rest.front() == '/') {
+    throw std::invalid_argument("Rucio URL must use exactly rucio:///scope:name");
+  }
+
   const auto colonPos = rest.find(':');
   const auto slashPos = rest.find('/');
-  // Support both DID spellings used by users and ROOT-safe plugin URLs:
-  //   rucio:///scope:name
-  //   rucio://scope/name
-  // The standalone parser also accepts rucio://scope:name, but ROOT's TUrl
-  // treats that form as authority syntax before this class sees it.
   if (colonPos != std::string::npos &&
       (slashPos == std::string::npos || colonPos < slashPos)) {
     fScope = UrlDecode(rest.substr(0, colonPos));
     fName = UrlDecode(rest.substr(colonPos + 1));
-  } else if (slashPos != std::string::npos) {
-    fScope = UrlDecode(rest.substr(0, slashPos));
-    fName = UrlDecode(rest.substr(slashPos + 1));
   } else {
     throw std::invalid_argument(
-        "Rucio URL must contain a DID as scope:name or scope/name");
+        "Rucio URL must contain a DID in native scope:name form");
   }
 
   if (fScope.empty() || fName.empty()) {
-    throw std::invalid_argument("Rucio URL has an empty scope or name");
+    throw std::invalid_argument(
+        "Rucio URL has an empty scope or name; did you mean "
+        "rucio:///scope:name with three slashes?");
   }
 
   std::stringstream stream(query);
