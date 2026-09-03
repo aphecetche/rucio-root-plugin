@@ -24,22 +24,26 @@ FetchContent_Declare(nlohmann_json
 FetchContent_MakeAvailable(nlohmann_json)
 
 set(RUCIO_ROOT_PLUGIN_SOURCES
-  G__RucioROOT.cxx
   src/TRucioFile.cxx
   src/TRucioResolver.cxx
   src/TRucioUrl.cxx
 )
 
-ROOT_GENERATE_DICTIONARY(G__RucioROOT inc/TRucioFile.h LINKDEF inc/LinkDef.h)
-
-add_library(RucioROOT SHARED ${RUCIO_ROOT_PLUGIN_SOURCES})
-target_include_directories(RucioROOT
-  PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/inc>
-    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
-  PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
+set(RUCIO_ROOT_PLUGIN_HEADERS
+  inc/TRucioFile.h
+  inc/TRucioResolver.h
+  inc/TRucioUrl.h
 )
+
+add_library(RucioROOT)
+
+target_sources(
+  RucioROOT
+  PRIVATE ${RUCIO_ROOT_PLUGIN_SOURCES}
+  PUBLIC FILE_SET HEADERS FILES ${RUCIO_ROOT_PLUGIN_HEADERS}
+  BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/inc
+)
+
 target_link_libraries(RucioROOT
   PUBLIC
     ROOT::Core
@@ -47,28 +51,35 @@ target_link_libraries(RucioROOT
     ROOT::Net
     ROOT::NetxNG
     CURL::libcurl
+    nlohmann_json::nlohmann_json
 )
-
-target_link_libraries(RucioROOT PUBLIC nlohmann_json::nlohmann_json)
 
 set_target_properties(RucioROOT PROPERTIES
   OUTPUT_NAME RucioROOT
   MACOSX_RPATH ON
 )
 
+root_generate_dictionary(G__RucioROOT ${RUCIO_ROOT_PLUGIN_HEADERS}
+  MODULE RucioROOT
+  LINKDEF inc/LinkDef.h
+)
+
 install(TARGETS RucioROOT
   EXPORT RucioROOTTargets
   LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-  ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+  FILE_SET HEADERS DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 install(FILES
   ${CMAKE_CURRENT_BINARY_DIR}/libRucioROOT.rootmap
   ${CMAKE_CURRENT_BINARY_DIR}/libRucioROOT_rdict.pcm
   DESTINATION ${CMAKE_INSTALL_LIBDIR}
 )
-install(DIRECTORY inc/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(DIRECTORY etc/plugins DESTINATION etc)
+
+configure_file("${CMAKE_CURRENT_SOURCE_DIR}/.rootrc.in"
+               "${CMAKE_CURRENT_BINARY_DIR}/.rootrc" @ONLY)
+
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/.rootrc" DESTINATION etc)
 
 option(RUCIO_ROOT_BUILD_TESTS "Build unit tests" ON)
 if(RUCIO_ROOT_BUILD_TESTS)

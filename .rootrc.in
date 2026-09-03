@@ -1,0 +1,2 @@
+Unix.*.Root.PluginPath: @CMAKE_INSTALL_PREFIX@/etc/plugins:$(ROOTSYS)/etc/root/plugins
+Unix.*.Root.DynamicPath: @CMAKE_INSTALL_PREFIX@/lib:$(ROOTSYS)/lib/root
