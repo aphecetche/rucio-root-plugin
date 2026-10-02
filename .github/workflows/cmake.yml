@@ -6,11 +6,14 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
       matrix:
         preset: [dev, release]
+        stack:
+          - { root: '6.32.0', xrootd: '5.6.9' }
+          - { root: '6.38.04', xrootd: '5.9.2' }
     defaults:
       run:
         shell: bash -el {0}
@@ -19,7 +22,7 @@ jobs:
       - name: Check out sources
         uses: actions/checkout@v4
 
-      - name: Set up ROOT
+      - name: Set up ROOT ${{ matrix.stack.root }} and XRootD ${{ matrix.stack.xrootd }}
         uses: mamba-org/setup-micromamba@v2
         with:
           environment-name: rucio-root-plugin
@@ -28,7 +31,8 @@ jobs:
             cmake
             make
             nlohmann_json
-            root
+            root=${{ matrix.stack.root }}
+            xrootd=${{ matrix.stack.xrootd }}
           cache-environment: true
 
       - name: Build ${{ matrix.preset }} preset
