@@ -9,6 +9,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(ROOT REQUIRED COMPONENTS Core RIO Net NetxNG)
+find_package(XRootD REQUIRED COMPONENTS CLIENT)
 find_package(CURL REQUIRED)
 include(${ROOT_USE_FILE})
 
@@ -53,6 +54,13 @@ target_link_libraries(RucioROOT
     CURL::libcurl
     nlohmann_json::nlohmann_json
 )
+
+if(TARGET XRootD::XrdCl)
+  target_link_libraries(RucioROOT PUBLIC XRootD::XrdCl)
+else()
+  target_include_directories(RucioROOT PUBLIC ${XROOTD_INCLUDE_DIRS})
+  target_link_libraries(RucioROOT PUBLIC ${XROOTD_CLIENT_LIBRARIES})
+endif()
 
 set_target_properties(RucioROOT PROPERTIES
   OUTPUT_NAME RucioROOT
